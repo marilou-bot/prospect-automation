@@ -18,11 +18,23 @@ st.caption("Trouve des restaurants à fort volume d'avis, détecte leur moteur d
 
 ASSETS = Path(__file__).parent / "assets"
 
+WELCOME = [{
+    "role": "assistant",
+    "content": "Bonjour ! Dis-moi où chercher, par ex. **« restaurants à Lyon »** ou "
+               "**« Bordeaux, plus de 1500 avis, uniquement Zenchef et TheFork »**.",
+}]
+
 
 def avatar(role: str):
     """Photo si le fichier existe, sinon avatar par défaut de Streamlit."""
     f = ASSETS / ("user.png" if role == "user" else "assistant.png")
     return str(f) if f.exists() else None
+
+
+def add_message(role: str, content: str):
+    """Ajoute le message à la session et le sauvegarde dans Supabase."""
+    st.session_state.messages.append({"role": role, "content": content})
+    db.save_message(role, content)
 
 
 # ---------- Compteur de quota ----------
@@ -60,13 +72,19 @@ with st.sidebar:
     st.caption("Colonnes : name, website, reviews_count (+ optionnel address, city, rating)")
     csv = st.file_uploader("CSV", type="csv", label_visibility="collapsed")
     run_csv = st.button("Analyser le CSV", disabled=csv is None)
+    st.divider()
+    if st.button("🗑️ Effacer l'historique"):
+        try:
+            db.client().table("chat_messages").delete().neq("id", 0).execute()
+        except Exception:
+            pass
+        st.session_state.messages = list(WELCOME)
+        st.session_state.results = None
+        st.rerun()
 
+# ---------- État de la session ----------
 if "messages" not in st.session_state:
-    st.session_state.messages = [{
-        "role": "assistant",
-        "content": "Bonjour ! Dis-moi où chercher, par ex. **« restaurants à Lyon »** ou "
-                   "**« Bordeaux, plus de 1500 avis, uniquement Zenchef et TheFork »**.",
-    }]
+    st.session_state.messages = db.load_messages() or list(WELCOME)
 if "results" not in st.session_state:
     st.session_state.results = None
 
@@ -123,7 +141,7 @@ def prospects_df(final):
 # ---------- Chat ----------
 prompt = st.chat_input("Où veux-tu chercher ?")
 if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    add_message("user", prompt)
     with st.chat_message("user", avatar=avatar("user")):
         st.markdown(prompt)
     with st.chat_message("assistant", avatar=avatar("assistant")):
@@ -142,7 +160,7 @@ if prompt:
                 reply, final = f"❌ Erreur : {e}", None
                 status.update(label="Erreur", state="error")
         st.markdown(reply)
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+    add_message("assistant", reply)
     render_quota(quota_slot)  # met à jour le compteur après la recherche
 
 if run_csv and csv is not None:
@@ -158,7 +176,7 @@ if run_csv and csv is not None:
     with st.status("Analyse du CSV…", expanded=True) as status:
         final = run_pipeline(rows, min_reviews, engines, status)
         status.update(label="Terminé", state="complete")
-    st.session_state.messages.append({"role": "assistant", "content": show_and_store(final) + autosave(final)})
+    add_message("assistant", show_and_store(final) + autosave(final))
     st.rerun()
 
 # ---------- Résultats ----------
