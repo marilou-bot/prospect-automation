@@ -14,6 +14,19 @@ from scanner import scan_site
 st.set_page_config(page_title="Resto Prospector", page_icon="🍽️", layout="wide")
 st.title("🍽️ Resto Prospector")
 st.caption("Trouve des restaurants à fort volume d'avis, détecte leur moteur de réservation et leurs contacts.")
+from pathlib import Path
+
+ASSETS = Path(__file__).parent / "assets"
+
+
+def avatar(role: str):
+    """Photo si le fichier existe, sinon avatar par défaut de Streamlit."""
+    f = ASSETS / ("user.png" if role == "user" else "assistant.png")
+    return str(f) if f.exists() else None
+for m in st.session_state.messages:
+    with st.chat_message(m["role"], avatar=avatar(m["role"])):
+        st.markdown(m["content"])
+    with st.chat_message("assistant", avatar=avatar("assistant")):
 
 
 # ---------- Compteur de quota ----------
