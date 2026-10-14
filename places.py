@@ -4,8 +4,6 @@ import requests
 
 from quota import consume
 
-consume(1)
-response = requests.post(url, ...)
 
 URL = "https://places.googleapis.com/v1/places:searchText"
 FIELDS = ",".join([
@@ -23,6 +21,7 @@ def search_restaurants(city: str, max_results: int = 60, query_suffix: str = "re
             "languageCode": "fr", "regionCode": "FR", "pageSize": 20}
     results = []
     while len(results) < max_results:
+        consume(1)
         r = requests.post(URL, headers=headers, json=body, timeout=20)
         r.raise_for_status()
         data = r.json()
