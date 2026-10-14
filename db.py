@@ -5,7 +5,12 @@ from supabase import create_client
 
 _client = None
 
-
+def fetch_all(limit: int = 1000) -> list[dict]:
+    sb = client()
+    if sb is None:
+        raise RuntimeError("SUPABASE_URL / SUPABASE_KEY manquants")
+    return sb.table("restaurants").select("*").order("reviews_count", desc=True).limit(limit).execute().data
+    
 def client():
     global _client
     if _client is None:
