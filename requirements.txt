@@ -2,6 +2,6 @@ streamlit>=1.40
 requests
 beautifulsoup4
 pandas
-supabase
+supabase>=2.15
 anthropic
 python-dotenv
