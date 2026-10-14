@@ -1,0 +1,20 @@
+Objet: Intégration IA Bookline dans {moteur}
+
+{salutation}
+
+Je suis Marilou de chez Bookline, partenaire technologique de {moteur}.
+
+Nous déployons actuellement des assistants vocaux capables de gérer les appels entrants, mais également de créer, modifier ou annuler des réservations automatiquement afin d’éviter de perdre des appels et des réservations pendant les services ou en dehors des heures d’ouverture.
+Nous accompagnons aujourd’hui plus de 1 500 restaurants partenaires de {moteur} dans l’automatisation de leurs appels et de leurs réservations, parmi lesquels les groupes Gruppomimo, Big Mamma et Groupe Giraudi.
+
+Nous serions ravis de pouvoir vous présenter notre solution lors d’une courte visioconférence d’une quinzaine de minutes, afin de vous montrer concrètement son fonctionnement et voir si elle pourrait répondre aux besoins de votre établissement.
+
+Quand seriez-vous disponible dans les prochains jours pour échanger ?
+Je reste bien entendu à votre disposition.
+
+Bien cordialement,
+Marilou
+Bookline
+
+--
+Vous recevez ce message car vos coordonnées professionnelles figurent sur le site de votre établissement. Si vous ne souhaitez pas être recontacté(e), répondez simplement « stop » et nous ne vous écrirons plus.
