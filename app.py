@@ -1,19 +1,12 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 
+import bootstrap  # noqa: F401  (charge .env + secrets, doit rester avant db/places)
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
-
-load_dotenv()
-# Streamlit Cloud : les secrets deviennent des variables d'environnement
-try:
-    for k, v in st.secrets.items():
-        os.environ.setdefault(k, str(v))
-except Exception:
-    pass
 
 import db
+import quota
 from nlu import ENGINE_NAMES, parse_request
 from places import search_restaurants
 from scanner import scan_site
@@ -22,12 +15,37 @@ st.set_page_config(page_title="Resto Prospector", page_icon="🍽️", layout="w
 st.title("🍽️ Resto Prospector")
 st.caption("Trouve des restaurants à fort volume d'avis, détecte leur moteur de réservation et leurs contacts.")
 
+
+# ---------- Compteur de quota ----------
+def render_quota(slot):
+    with slot.container():
+        try:
+            u = quota.get_usage()
+        except Exception as e:
+            st.warning(f"Compteur de quota indisponible : {e}")
+            return
+        if u is None:
+            st.warning("Supabase non configuré : le compteur de quota est indisponible.")
+            return
+        c1, c2 = st.columns(2)
+        c1.metric("Requêtes Google ce mois-ci", f"{u['month']} / {quota.MONTHLY_LIMIT}")
+        c2.metric("Requêtes aujourd'hui", f"{u['day']} / {quota.DAILY_LIMIT}")
+        st.progress(min(u["month"] / quota.MONTHLY_LIMIT, 1.0))
+        if u["month"] >= quota.MONTHLY_LIMIT:
+            st.error("Limite mensuelle atteinte : les recherches Google sont bloquées jusqu'au mois prochain.")
+        elif u["day"] >= quota.DAILY_LIMIT:
+            st.warning("Limite quotidienne atteinte : réessaie demain.")
+
+
+quota_slot = st.empty()
+render_quota(quota_slot)
+
 # ---------- Barre latérale : critères ----------
 with st.sidebar:
     st.header("Critères")
     min_reviews = st.number_input("Avis Google minimum", 0, 50000, 1000, step=100)
     engines = st.multiselect("Moteurs de réservation ciblés", ENGINE_NAMES, default=ENGINE_NAMES)
-    max_results = st.slider("Restaurants analysés par recherche", 20, 120, 60, step=20)
+    max_results = st.slider("Restaurants analysés par recherche", 20, 120, 40, step=20)
     st.divider()
     st.subheader("Ou importer ta liste (CSV)")
     st.caption("Colonnes : name, website, reviews_count (+ optionnel address, city, rating)")
@@ -73,6 +91,17 @@ def show_and_store(final):
     return f"**{len(final)} restaurants** correspondent, dont **{with_mail}** avec au moins un email trouvé."
 
 
+def autosave(final):
+    """Enregistre automatiquement les résultats dans Supabase."""
+    if not final:
+        return ""
+    try:
+        n = db.save_restaurants(final)
+        return f" {n} enregistrés dans la base (page *Restaurants*)."
+    except Exception as e:
+        return f" ⚠️ Sauvegarde Supabase impossible : {e}"
+
+
 def prospects_df(final):
     df = pd.DataFrame(final)
     cols = ["name", "city", "reviews_count", "rating", "booking_engine", "emails", "website", "phone", "engine_evidence"]
@@ -98,13 +127,14 @@ if prompt:
             try:
                 rows = search_restaurants(city, max_results=mx)
                 final = run_pipeline(rows, mr, eng, status)
-                reply = show_and_store(final)
+                reply = show_and_store(final) + autosave(final)
                 status.update(label="Terminé", state="complete")
             except Exception as e:
                 reply, final = f"❌ Erreur : {e}", None
                 status.update(label="Erreur", state="error")
         st.markdown(reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
+    render_quota(quota_slot)  # met à jour le compteur après la recherche
 
 if run_csv and csv is not None:
     df_in = pd.read_csv(csv)
@@ -119,7 +149,7 @@ if run_csv and csv is not None:
     with st.status("Analyse du CSV…", expanded=True) as status:
         final = run_pipeline(rows, min_reviews, engines, status)
         status.update(label="Terminé", state="complete")
-    st.session_state.messages.append({"role": "assistant", "content": show_and_store(final)})
+    st.session_state.messages.append({"role": "assistant", "content": show_and_store(final) + autosave(final)})
     st.rerun()
 
 # ---------- Résultats ----------
@@ -127,11 +157,4 @@ if st.session_state.results:
     st.subheader("Prospects trouvés")
     df = prospects_df(st.session_state.results)
     st.dataframe(df, use_container_width=True, hide_index=True)
-    c1, c2, _ = st.columns([1, 1, 4])
-    c1.download_button("⬇️ Export CSV", df.to_csv(index=False).encode("utf-8"), "prospects.csv", "text/csv")
-    if c2.button("💾 Sauver dans Supabase"):
-        try:
-            n = db.save_restaurants(st.session_state.results)
-            st.success(f"{n} restaurants enregistrés.")
-        except Exception as e:
-            st.error(f"Supabase : {e}")
+    st.download_button("⬇️ Export CSV", df.to_csv(index=False).encode("utf-8"), "prospects.csv", "text/csv")
