@@ -1,34 +1,56 @@
-"""Comprend une demande en langage naturel -> paramètres de recherche."""
-import json
+"""Stockage Supabase."""
 import os
-import re
+from datetime import datetime, timezone
+from supabase import create_client
 
-ENGINE_NAMES = ["Zenchef", "TheFork", "SevenRooms", "CoverManager", "OpenTable"]
-
-
-def _fallback(text: str) -> dict:
-    m = re.search(r"\b(?:à|a|sur|dans|in)\s+([A-Za-zÀ-ÿ' \-]+)", text)
-    city = (m.group(1) if m else text).strip(" .?!")
-    return {"city": city, "min_reviews": None, "engines": None, "max_results": None}
+_client = None
 
 
-def parse_request(text: str) -> dict:
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        return _fallback(text)
-    try:
-        import anthropic
-        resp = anthropic.Anthropic().messages.create(
-            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
-            max_tokens=300,
-            system=(
-                "Tu extrais des paramètres de recherche de restaurants en France. Réponds UNIQUEMENT "
-                'avec un JSON : {"city": str, "min_reviews": int|null, "engines": [str]|null, '
-                '"max_results": int|null}. engines ⊂ ' + str(ENGINE_NAMES) + ". "
-                "Mets null si l'utilisateur ne précise pas."
-            ),
-            messages=[{"role": "user", "content": text}],
-        )
-        raw = "".join(b.text for b in resp.content if b.type == "text")
-        return json.loads(re.sub(r"```json|```", "", raw).strip())
-    except Exception:
-        return _fallback(text)
+def client():
+    global _client
+    if _client is None:
+        url, key = os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY")
+        if not url or not key:
+            return None
+        _client = create_client(url, key)
+    return _client
+
+
+def save_restaurants(rows: list[dict]) -> int:
+    sb = client()
+    if sb is None:
+        raise RuntimeError("SUPABASE_URL / SUPABASE_KEY manquants")
+    now = datetime.now(timezone.utc).isoformat()
+    payload = []
+    for r in rows:
+        payload.append({
+            "dedupe_key": r["dedupe_key"], "name": r["name"], "city": r.get("city"),
+            "address": r.get("address"), "website": r.get("website"), "phone": r.get("phone"),
+            "rating": r.get("rating"), "reviews_count": r.get("reviews_count"),
+            "booking_engine": r.get("booking_engine"), "engine_evidence": r.get("engine_evidence"),
+            "emails": r.get("emails") or [], "contact_page": r.get("contact_page"), "scanned_at": now,
+        })
+    if payload:
+        # le statut n'est pas dans le payload : un restaurant déjà traité garde son statut
+        sb.table("restaurants").upsert(payload, on_conflict="dedupe_key").execute()
+    return len(payload)
+
+
+def fetch(status: str | list[str], limit: int = 300) -> list[dict]:
+    q = client().table("restaurants").select("*")
+    q = q.in_("status", status) if isinstance(status, list) else q.eq("status", status)
+    return q.order("reviews_count", desc=True).limit(limit).execute().data
+
+
+def update(row_id: str, fields: dict) -> None:
+    client().table("restaurants").update(fields).eq("id", row_id).execute()
+
+
+def count_status(status: str) -> int:
+    return client().table("restaurants").select("id", count="exact").eq("status", status).limit(1).execute().count or 0
+
+
+def count_sent_today() -> int:
+    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    res = client().table("restaurants").select("id", count="exact").eq("status", "sent").gte("sent_at", start).limit(1).execute()
+    return res.count or 0
