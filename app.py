@@ -1,5 +1,6 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import bootstrap  # noqa: F401  (charge .env + secrets, doit rester avant db/places)
 import pandas as pd
@@ -14,7 +15,6 @@ from scanner import scan_site
 st.set_page_config(page_title="Resto Prospector", page_icon="🍽️", layout="wide")
 st.title("🍽️ Resto Prospector")
 st.caption("Trouve des restaurants à fort volume d'avis, détecte leur moteur de réservation et leurs contacts.")
-from pathlib import Path
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -23,10 +23,6 @@ def avatar(role: str):
     """Photo si le fichier existe, sinon avatar par défaut de Streamlit."""
     f = ASSETS / ("user.png" if role == "user" else "assistant.png")
     return str(f) if f.exists() else None
-for m in st.session_state.messages:
-    with st.chat_message(m["role"], avatar=avatar(m["role"])):
-        st.markdown(m["content"])
-    with st.chat_message("assistant", avatar=avatar("assistant")):
 
 
 # ---------- Compteur de quota ----------
@@ -75,7 +71,7 @@ if "results" not in st.session_state:
     st.session_state.results = None
 
 for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
+    with st.chat_message(m["role"], avatar=avatar(m["role"])):
         st.markdown(m["content"])
 
 
@@ -128,9 +124,9 @@ def prospects_df(final):
 prompt = st.chat_input("Où veux-tu chercher ?")
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=avatar("user")):
         st.markdown(prompt)
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar=avatar("assistant")):
         p = parse_request(prompt)
         mr = p.get("min_reviews") or min_reviews
         eng = p.get("engines") or engines
