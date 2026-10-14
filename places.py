@@ -2,6 +2,11 @@
 import os
 import requests
 
+from quota import consume
+
+consume(1)
+response = requests.post(url, ...)
+
 URL = "https://places.googleapis.com/v1/places:searchText"
 FIELDS = ",".join([
     "places.id", "places.displayName", "places.formattedAddress", "places.rating",
