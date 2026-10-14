@@ -4,9 +4,9 @@ import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
-# Streamlit Cloud : les secrets deviennent des variables d'environnement
 try:
     for k, v in st.secrets.items():
-        os.environ.setdefault(k, str(v))
+        if isinstance(v, (str, int, float, bool)):
+            os.environ[k] = str(v)   # les Secrets écrasent le .env
 except Exception:
     pass
