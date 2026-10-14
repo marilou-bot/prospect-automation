@@ -59,3 +59,23 @@ def count_sent_today() -> int:
     start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     res = client().table("restaurants").select("id", count="exact").eq("status", "sent").gte("sent_at", start).limit(1).execute()
     return res.count or 0
+def save_message(role: str, content: str) -> None:
+    sb = client()
+    if sb is None:
+        return
+    try:
+        sb.table("chat_messages").insert({"role": role, "content": content}).execute()
+    except Exception:
+        pass  # ne jamais bloquer l'app pour l'historique
+
+
+def load_messages(limit: int = 50) -> list[dict]:
+    sb = client()
+    if sb is None:
+        return []
+    try:
+        rows = (sb.table("chat_messages").select("role,content")
+                .order("id", desc=True).limit(limit).execute().data)
+    except Exception:
+        return []
+    return list(reversed(rows))
